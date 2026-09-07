@@ -1,4 +1,4 @@
-import { CHORDS, STRING_NAMES } from './chords-data.js';
+import { CHORDS, MAIN_CHORDS, ADDITIONAL_CHORDS, STRING_NAMES } from './chords-data.js?v=chords-2';
 import { PATTERNS } from './patterns-data.js?v=eighth-10';
 
 const $ = selector => document.querySelector(selector);
@@ -32,6 +32,7 @@ const LANGUAGE_PAIRS = [
   ['удар', 'úder'],
   ['Библиотека', 'Knihovna'],
   ['Аккорды', 'Akordy'],
+  ['Дополнительные аккорды', 'Další akordy'],
   ['Нажмите на карточку, чтобы добавить аккорд', 'Kliknutím na kartu přidáte akord'],
   ['или перетащите её на таймлайн', 'nebo ji přetáhněte na časovou osu'],
   ['Аранжировка', 'Aranžmá'],
@@ -92,7 +93,8 @@ export function createInitialState() {
 export function persist(state) { localStorage.setItem(appKey, JSON.stringify({ songName: state.songName, language: state.language, bpm: state.bpm, patternId: state.pattern.id, loop: state.loop, mutedStrikes: state.mutedStrikes, currentSectionId: state.currentSectionId, songOrder: state.songOrder, sections: state.sections.map(section => ({ id: section.id, name: section.name, sequence: section.sequence.map(({ chord, bars, strumPart }) => ({ chord: { id: chord.id }, bars, strumPart: strumPart || 'full' })) })) })); }
 
 export function renderPalette(onAdd) {
-  const palette = $('#palette'); palette.innerHTML = CHORDS.map(chord => `<article class="chord-card" draggable="true" data-id="${chord.id}"><div class="card-top"><strong>${chord.name}</strong><button class="add-button" aria-label="Добавить ${chord.name}">+</button></div>${renderChordDiagram(chord)}</article>`).join('');
+  const card = chord => `<article class="chord-card" draggable="true" data-id="${chord.id}"><div class="card-top"><strong>${chord.name}</strong><button class="add-button" aria-label="Добавить ${chord.name}">+</button></div>${renderChordDiagram(chord)}</article>`;
+  const palette = $('#palette'); palette.innerHTML = `<div class="palette-main">${MAIN_CHORDS.map(card).join('')}</div><details class="additional-chords"><summary>＋ Дополнительные аккорды <span>${ADDITIONAL_CHORDS.length}</span></summary><div class="palette additional-grid">${ADDITIONAL_CHORDS.map(card).join('')}</div></details>`;
   palette.querySelectorAll('.chord-card').forEach(card => { card.addEventListener('dragstart', () => draggedId = card.dataset.id); card.addEventListener('click', event => { if (!event.target.closest('button')) onAdd(card.dataset.id); }); card.querySelector('.add-button').addEventListener('click', event => { event.stopPropagation(); onAdd(card.dataset.id); }); });
 }
 
