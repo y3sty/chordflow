@@ -1,7 +1,7 @@
-import { CHORDS, PATTERNS } from './ui.js?v=chords-3';
+import { CHORDS, PATTERNS } from './ui.js?v=chords-4';
 import { AudioEngine } from './audio-engine.js?v=eighth-10';
 import { Sequencer } from './sequencer.js?v=eighth-10';
-import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=chords-3';
+import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=chords-4';
 
 const state = createInitialState();
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzoNGnjZD05oRdKJJCqSOUEMy31uibqpCdI_OExG-B8iWRDFtFHCEkDkGTsR_HSKzo/exec';
@@ -89,6 +89,7 @@ const handlers = {
   bpm(value) { state.bpm = value; sequencer.setTempo(value); $('#bpm-value').textContent = `${value} BPM`; persist(state); },
   loop(value) { state.loop = value; persist(state); },
   muted(value) { state.mutedStrikes = value; persist(state); },
+  showStructure(value) { state.showSongStructure = value; persist(state); $('#section-switcher').classList.toggle('hidden', !value); },
   language() { state.language = state.language === 'ru' ? 'cs' : 'ru'; refresh(); },
 };
 
