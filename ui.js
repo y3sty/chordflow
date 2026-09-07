@@ -41,6 +41,7 @@ const LANGUAGE_PAIRS = [
   ['Стереть куплет', 'Smazat sloku'],
   ['Стереть припев', 'Smazat refrén'],
   ['Стереть бридж', 'Smazat bridge'],
+  ['Очистить всё', 'Vymazat vše'],
   ['вниз', 'dolů'],
   ['вверх', 'nahoru'],
   ['Порядок песни', 'Pořadí písně'],
@@ -114,6 +115,7 @@ export function renderTimeline(state, handlers) {
   $('#duplicate-all').onclick = handlers.duplicateAll;
   $('#clear-section').textContent = `⌫ Стереть ${section.name.toLowerCase()}`;
   $('#clear-section').onclick = handlers.clearSection;
+  $('#clear-all').onclick = handlers.clearAll;
   timeline.ondragover = e => e.preventDefault(); timeline.ondrop = e => { e.preventDefault(); if (draggedId) handlers.add(draggedId); draggedId = null; };
   timeline.querySelectorAll('.timeline-block').forEach(block => { block.addEventListener('dragstart', () => draggedId = `index:${block.dataset.index}`); block.addEventListener('drop', e => { e.stopPropagation(); if (draggedId?.startsWith('index:')) handlers.reorder(Number(draggedId.slice(6)), Number(block.dataset.index)); }); block.querySelectorAll('button').forEach(el => el.addEventListener('click', () => handlers.action(el.dataset.action, Number(block.dataset.index)))); block.querySelector('input').addEventListener('change', e => handlers.bars(Number(block.dataset.index), Number(e.target.value))); const segment = block.querySelector('select[data-action="segment"]'); if (segment) segment.value = sequence[Number(block.dataset.index)].strumPart || 'full'; if (segment) segment.addEventListener('change', e => handlers.segment(Number(block.dataset.index), e.target.value)); });
 }
