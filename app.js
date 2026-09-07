@@ -1,7 +1,7 @@
-import { CHORDS, PATTERNS } from './ui.js?v=eighth-8';
-import { AudioEngine } from './audio-engine.js?v=eighth-8';
-import { Sequencer } from './sequencer.js?v=eighth-8';
-import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=eighth-8';
+import { CHORDS, PATTERNS } from './ui.js?v=eighth-9';
+import { AudioEngine } from './audio-engine.js?v=eighth-9';
+import { Sequencer } from './sequencer.js?v=eighth-9';
+import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=eighth-9';
 
 const state = createInitialState();
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzoNGnjZD05oRdKJJCqSOUEMy31uibqpCdI_OExG-B8iWRDFtFHCEkDkGTsR_HSKzo/exec';
@@ -92,7 +92,7 @@ const handlers = {
 };
 
 renderPalette(handlers.add); refresh();
-$('#play').onclick = async () => { if (sequencer.running) { sequencer.pause(); setTransportState(false); } else { const sequence = playbackSequence(); if (!sequence.length) return; await sequencer.start({ ...state, sequence }); setTransportState(true); } };
+$('#play').onclick = async () => { if (sequencer.running) { sequencer.pause(); setTransportState(false); } else { const sequence = playbackSequence(); if (!sequence.length) return; audio.unlock(); await sequencer.start({ ...state, sequence }); setTransportState(true); } };
 $('#stop').onclick = () => { sequencer.stop(); setTransportState(false); };
 $('#save-song').onclick = saveSong;
 $('#open-song').onclick = () => $('#song-file').click();

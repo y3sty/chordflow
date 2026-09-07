@@ -14,16 +14,29 @@ function loadScript(url) {
 export class AudioEngine {
   constructor(onStatus = () => {}) { this.context = null; this.master = null; this.player = null; this.instrument = null; this.readyPromise = null; this.onStatus = onStatus; }
 
-  async resume() {
+  ensureContext() {
     if (!this.context) {
-      this.context = new AudioContext();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error('Web Audio API не поддерживается этим браузером');
+      this.context = new AudioContextClass();
       this.master = this.context.createGain();
       this.master.gain.value = 0.58;
       this.master.connect(this.context.destination);
       this.onStatus('Загрузка стальной гитары…');
       this.readyPromise = this.loadSteelGuitar();
     }
-    if (this.context.state === 'suspended') await this.context.resume();
+  }
+
+  unlock() {
+    this.ensureContext();
+    const buffer = this.context.createBuffer(1, Math.ceil(this.context.sampleRate * 0.02), this.context.sampleRate);
+    const source = this.context.createBufferSource(); source.buffer = buffer; source.connect(this.master); source.start(0);
+    void this.context.resume();
+  }
+
+  async resume() {
+    this.ensureContext();
+    if (this.context.state !== 'running') await this.context.resume();
     await this.readyPromise;
   }
 
