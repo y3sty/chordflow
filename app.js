@@ -1,7 +1,7 @@
-import { CHORDS, PATTERNS } from './ui.js?v=eighth-9';
-import { AudioEngine } from './audio-engine.js?v=eighth-9';
-import { Sequencer } from './sequencer.js?v=eighth-9';
-import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=eighth-9';
+import { CHORDS, PATTERNS } from './ui.js?v=eighth-10';
+import { AudioEngine } from './audio-engine.js?v=eighth-10';
+import { Sequencer } from './sequencer.js?v=eighth-10';
+import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=eighth-10';
 
 const state = createInitialState();
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzoNGnjZD05oRdKJJCqSOUEMy31uibqpCdI_OExG-B8iWRDFtFHCEkDkGTsR_HSKzo/exec';

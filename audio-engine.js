@@ -12,7 +12,22 @@ function loadScript(url) {
 }
 
 export class AudioEngine {
-  constructor(onStatus = () => {}) { this.context = null; this.master = null; this.player = null; this.instrument = null; this.readyPromise = null; this.onStatus = onStatus; }
+  constructor(onStatus = () => {}) { this.context = null; this.master = null; this.player = null; this.instrument = null; this.readyPromise = null; this.iosAudio = null; this.onStatus = onStatus; }
+
+  unlockIosSilentMode() {
+    const isIosSafari = navigator.maxTouchPoints > 0 && window.webkitAudioContext;
+    if (!isIosSafari || this.iosAudio) return;
+    const sampleRate = 44100;
+    const header = new ArrayBuffer(10); const view = new DataView(header);
+    view.setUint32(0, sampleRate, true); view.setUint32(4, sampleRate, true); view.setUint16(8, 1, true);
+    const missing = window.btoa(String.fromCharCode(...new Uint8Array(header))).slice(0, 13);
+    const silentWav = `data:audio/wav;base64,UklGRisAAABXQVZFZm10IBAAAAABAAEA${missing}AgAZGF0YQcAAACAgICAgICAAAA=`;
+    const audio = document.createElement('audio');
+    audio.setAttribute('x-webkit-airplay', 'deny'); audio.setAttribute('playsinline', ''); audio.preload = 'auto'; audio.loop = true; audio.src = silentWav;
+    audio.load();
+    this.iosAudio = audio;
+    audio.play().catch(() => { audio.pause(); audio.removeAttribute('src'); audio.load(); this.iosAudio = null; });
+  }
 
   ensureContext() {
     if (!this.context) {
@@ -28,6 +43,7 @@ export class AudioEngine {
   }
 
   unlock() {
+    this.unlockIosSilentMode();
     this.ensureContext();
     const buffer = this.context.createBuffer(1, Math.ceil(this.context.sampleRate * 0.02), this.context.sampleRate);
     const source = this.context.createBufferSource(); source.buffer = buffer; source.connect(this.master); source.start(0);

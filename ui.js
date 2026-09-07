@@ -1,5 +1,5 @@
 import { CHORDS, STRING_NAMES } from './chords-data.js';
-import { PATTERNS } from './patterns-data.js?v=eighth-9';
+import { PATTERNS } from './patterns-data.js?v=eighth-10';
 
 const $ = selector => document.querySelector(selector);
 const appKey = 'guitar-constructor-session-v1';
