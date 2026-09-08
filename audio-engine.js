@@ -12,7 +12,7 @@ function loadScript(url) {
 }
 
 export class AudioEngine {
-  constructor(onStatus = () => {}) { this.context = null; this.master = null; this.player = null; this.instrument = null; this.readyPromise = null; this.iosAudio = null; this.onStatus = onStatus; }
+  constructor(onStatus = () => {}) { this.context = null; this.master = null; this.recordDestination = null; this.player = null; this.instrument = null; this.readyPromise = null; this.iosAudio = null; this.onStatus = onStatus; }
 
   unlockIosSilentMode() {
     const isIosSafari = navigator.maxTouchPoints > 0 && window.webkitAudioContext;
@@ -38,6 +38,10 @@ export class AudioEngine {
       this.master = this.context.createGain();
       this.master.gain.value = 0.58;
       this.master.connect(this.context.destination);
+      if (this.context.createMediaStreamDestination) {
+        this.recordDestination = this.context.createMediaStreamDestination();
+        this.master.connect(this.recordDestination);
+      }
       this.onStatus('Загрузка стальной гитары…');
       this.readyPromise = this.loadSteelGuitar();
     }
@@ -56,6 +60,18 @@ export class AudioEngine {
     this.unlockIosSilentMode();
     if (this.context.state !== 'running') await this.context.resume();
     await this.readyPromise;
+  }
+
+  startRecording() {
+    if (!this.recordDestination || !window.MediaRecorder) throw new Error('Запись аудио не поддерживается этим браузером');
+    const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+    const mimeType = types.find(type => MediaRecorder.isTypeSupported?.(type)) || '';
+    const chunks = [];
+    const recorder = new MediaRecorder(this.recordDestination.stream, mimeType ? { mimeType } : undefined);
+    this.recorder = recorder;
+    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+    recorder.start(100);
+    return { recorder, mimeType, done: new Promise(resolve => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/mp4' })); }) };
   }
 
   async loadSteelGuitar() {

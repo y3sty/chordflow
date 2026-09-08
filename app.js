@@ -6,6 +6,20 @@ import { createInitialState, persist, renderPalette, renderSections, renderTimel
 const state = createInitialState();
 const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzoNGnjZD05oRdKJJCqSOUEMy31uibqpCdI_OExG-B8iWRDFtFHCEkDkGTsR_HSKzo/exec';
 const audio = new AudioEngine(status => { $('#audio-status').textContent = status; });
+const backgroundAudio = $('#background-audio');
+let backgroundAudioUrl = null;
+backgroundAudio.loop = false;
+backgroundAudio.addEventListener('ended', () => {
+  if (!state.loop || !backgroundAudio.src) return;
+  backgroundAudio.currentTime = 0;
+  backgroundAudio.play().catch(() => {});
+});
+backgroundAudio.addEventListener('timeupdate', () => {
+  if (!state.loop || !backgroundAudio.src || !Number.isFinite(backgroundAudio.duration)) return;
+  // Ранний переход помогает Safari, который иногда не перезапускает Blob-аудио
+  // через событие ended после блокировки экрана.
+  if (backgroundAudio.currentTime >= backgroundAudio.duration - 0.12) backgroundAudio.currentTime = 0;
+});
 const sequencer = new Sequencer(audio, (item, step) => {
   if (item?.sectionId && item.sectionId !== state.currentSectionId) { state.currentSectionId = item.sectionId; refresh(); }
   updatePlayhead(item, step, state.currentSectionId);
@@ -87,22 +101,66 @@ const handlers = {
   removeOrder(index) { if (state.songOrder.length > 1) state.songOrder.splice(index, 1); refresh(); },
   pattern(id) { state.pattern = PATTERNS.find(p => p.id === id) || PATTERNS[0]; refresh(); },
   bpm(value) { state.bpm = value; sequencer.setTempo(value); $('#bpm-value').textContent = `${value} BPM`; persist(state); },
-  loop(value) { state.loop = value; persist(state); },
+  loop(value) { state.loop = value; backgroundAudio.loop = value; persist(state); },
   muted(value) { state.mutedStrikes = value; persist(state); },
   showStructure(value) { state.showSongStructure = value; persist(state); $('#section-switcher').classList.toggle('hidden', !value); },
   language() { state.language = state.language === 'ru' ? 'cs' : 'ru'; refresh(); },
 };
 
 renderPalette(handlers.add); refresh();
-$('#play').onclick = async () => { if (sequencer.running) { sequencer.pause(); setTransportState(false); } else { const sequence = playbackSequence(); if (!sequence.length) return; audio.unlock(); await sequencer.start({ ...state, sequence }); setTransportState(true); } };
-$('#stop').onclick = () => { sequencer.stop(); setTransportState(false); };
+$('#play').onclick = async () => { stopBackgroundAudio(); if (sequencer.running) { sequencer.pause(); setTransportState(false); } else { const sequence = playbackSequence(); if (!sequence.length) return; audio.unlock(); await sequencer.start({ ...state, sequence }); setTransportState(true); } };
+function stopBackgroundAudio() {
+  backgroundAudio.pause();
+  backgroundAudio.removeAttribute('src');
+  backgroundAudio.load();
+  if (backgroundAudioUrl) { URL.revokeObjectURL(backgroundAudioUrl); backgroundAudioUrl = null; }
+}
+
+function setMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try { navigator.mediaSession.metadata = new MediaMetadata({ title: state.songName || 'Моя мелодия', artist: 'Chordflow', album: 'Конструктор аккордов' }); } catch {}
+  const actions = {
+    play: () => backgroundAudio.play(),
+    pause: () => backgroundAudio.pause(),
+    seekbackward: () => { backgroundAudio.currentTime = Math.max(0, backgroundAudio.currentTime - 10); },
+    seekforward: () => { backgroundAudio.currentTime = Math.min(backgroundAudio.duration || Infinity, backgroundAudio.currentTime + 10); },
+  };
+  Object.entries(actions).forEach(([action, handler]) => { try { navigator.mediaSession.setActionHandler?.(action, handler); } catch {} });
+}
+
+$('#stop').onclick = () => { sequencer.stop(); stopBackgroundAudio(); setTransportState(false); };
 $('#background-play').onclick = async () => {
   const sequence = playbackSequence();
   if (!sequence.length) return;
-  audio.unlock();
-  if (!sequencer.running) { await sequencer.start({ ...state, sequence }); setTransportState(true); }
-  $('#background-play').textContent = '♫  Фоновый режим включён';
-  $('#audio-status').textContent = 'Попытка фонового воспроизведения';
+  const button = $('#background-play');
+  button.disabled = true;
+  button.textContent = '♫  Собираю фоновую музыку…';
+  try {
+    stopBackgroundAudio();
+    audio.unlock();
+    await audio.resume();
+    const recordState = { ...state, sequence, loop: false };
+    const built = sequencer.buildEvents(recordState);
+    sequencer.stop();
+    const recording = audio.startRecording();
+    await sequencer.start(recordState);
+    await new Promise(resolve => setTimeout(resolve, (built.totalUnits * 60 / state.bpm / 4 + 1.4) * 1000));
+    sequencer.stop();
+    const blob = await recording.done;
+    backgroundAudioUrl = URL.createObjectURL(blob);
+    backgroundAudio.src = backgroundAudioUrl;
+    // Используем и встроенный loop, и резервный обработчик ended:
+    // разные версии Safari по-разному работают с Blob-аудио.
+    backgroundAudio.loop = state.loop;
+    setMediaSession();
+    await backgroundAudio.play();
+    button.textContent = '♫  Фоновый режим включён';
+    $('#audio-status').textContent = 'Фоновая музыка готова';
+  } catch (error) {
+    console.warn('Фоновая запись не запустилась:', error);
+    button.textContent = '♫  Играть в фоне';
+    $('#audio-status').textContent = 'Нажмите кнопку ещё раз, чтобы запустить фоновую музыку';
+  } finally { button.disabled = false; }
 };
 const resumeAfterBackground = () => { if (audio.context) audio.resume().catch(() => {}); };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAfterBackground(); });

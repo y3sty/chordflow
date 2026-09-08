@@ -18,6 +18,8 @@ const LANGUAGE_PAIRS = [
   ['■  Стоп', '■  Stop'],
   ['♫  Играть в фоне', '♫  Přehrávat na pozadí'],
   ['♫  Фоновый режим включён', '♫  Režim přehrávání na pozadí zapnut'],
+  ['♫  Собираю фоновую музыку…', '♫  Připravuji hudbu na pozadí…'],
+  ['Нажмите кнопку ещё раз, чтобы запустить фоновую музыку', 'Stiskněte tlačítko znovu pro spuštění hudby na pozadí'],
   ['Зациклить', 'Opakovat'],
   ['Сохранить', 'Uložit'],
   ['Открыть', 'Otevřít'],
