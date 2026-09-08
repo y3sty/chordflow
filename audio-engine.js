@@ -16,7 +16,8 @@ export class AudioEngine {
 
   unlockIosSilentMode() {
     const isIosSafari = navigator.maxTouchPoints > 0 && window.webkitAudioContext;
-    if (!isIosSafari || this.iosAudio) return;
+    if (!isIosSafari) return;
+    if (this.iosAudio) { this.iosAudio.play().catch(() => {}); return; }
     const sampleRate = 44100;
     const header = new ArrayBuffer(10); const view = new DataView(header);
     view.setUint32(0, sampleRate, true); view.setUint32(4, sampleRate, true); view.setUint16(8, 1, true);
@@ -52,6 +53,7 @@ export class AudioEngine {
 
   async resume() {
     this.ensureContext();
+    this.unlockIosSilentMode();
     if (this.context.state !== 'running') await this.context.resume();
     await this.readyPromise;
   }

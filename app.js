@@ -96,6 +96,17 @@ const handlers = {
 renderPalette(handlers.add); refresh();
 $('#play').onclick = async () => { if (sequencer.running) { sequencer.pause(); setTransportState(false); } else { const sequence = playbackSequence(); if (!sequence.length) return; audio.unlock(); await sequencer.start({ ...state, sequence }); setTransportState(true); } };
 $('#stop').onclick = () => { sequencer.stop(); setTransportState(false); };
+$('#background-play').onclick = async () => {
+  const sequence = playbackSequence();
+  if (!sequence.length) return;
+  audio.unlock();
+  if (!sequencer.running) { await sequencer.start({ ...state, sequence }); setTransportState(true); }
+  $('#background-play').textContent = '♫  Фоновый режим включён';
+  $('#audio-status').textContent = 'Попытка фонового воспроизведения';
+};
+const resumeAfterBackground = () => { if (audio.context) audio.resume().catch(() => {}); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAfterBackground(); });
+window.addEventListener('pageshow', resumeAfterBackground);
 $('#save-song').onclick = saveSong;
 $('#open-song').onclick = () => $('#song-file').click();
 $('#song-file').onchange = event => { if (event.target.files[0]) loadSong(event.target.files[0]); event.target.value = ''; };
