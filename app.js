@@ -8,6 +8,38 @@ const CLOUD_URL = 'https://script.google.com/macros/s/AKfycbzoNGnjZD05oRdKJJCqSO
 const audio = new AudioEngine(status => { $('#audio-status').textContent = status; });
 const backgroundAudio = $('#background-audio');
 let backgroundAudioUrl = null;
+const lyricsOverlay = $('#lyrics-overlay');
+const lyricsText = $('#lyrics-text');
+const lyricsAutoscroll = $('#lyrics-autoscroll');
+const lyricsSpeed = $('#lyrics-speed');
+const lyricsSpeedValue = $('#lyrics-speed-value');
+let lyricsScrollTimer = null;
+let lyricsScrollPosition = 0;
+const lyricsStorageKey = 'guitar-constructor-lyrics-v1';
+lyricsText.value = localStorage.getItem(lyricsStorageKey) || '';
+const stopLyricsAutoscroll = () => { if (lyricsScrollTimer) clearInterval(lyricsScrollTimer); lyricsScrollTimer = null; };
+const scrollLyrics = () => {
+  if (!lyricsAutoscroll.checked || lyricsOverlay.hidden) { stopLyricsAutoscroll(); return; }
+  // Скорость указана в условных уровнях: даже первый уровень должен
+  // медленно двигать текст, а второй — оставаться удобным для чтения.
+  lyricsScrollPosition += Number(lyricsSpeed.value) * 0.075;
+  lyricsText.scrollTop = lyricsScrollPosition;
+  if (lyricsText.scrollTop + lyricsText.clientHeight >= lyricsText.scrollHeight - 2) {
+    lyricsAutoscroll.checked = false;
+    stopLyricsAutoscroll();
+    return;
+  }
+};
+const startLyricsAutoscroll = () => { stopLyricsAutoscroll(); lyricsScrollPosition = lyricsText.scrollTop; lyricsScrollTimer = setInterval(scrollLyrics, 50); };
+const openLyrics = () => { lyricsOverlay.hidden = false; document.body.classList.add('lyrics-open'); lyricsText.focus(); };
+const closeLyrics = () => { lyricsAutoscroll.checked = false; stopLyricsAutoscroll(); lyricsOverlay.hidden = true; document.body.classList.remove('lyrics-open'); };
+$('#lyrics-open').onclick = openLyrics;
+$('#lyrics-close').onclick = closeLyrics;
+lyricsOverlay.addEventListener('click', event => { if (event.target === lyricsOverlay) closeLyrics(); });
+lyricsText.addEventListener('input', () => localStorage.setItem(lyricsStorageKey, lyricsText.value));
+lyricsAutoscroll.onchange = () => lyricsAutoscroll.checked ? startLyricsAutoscroll() : stopLyricsAutoscroll();
+lyricsSpeed.oninput = () => { lyricsSpeedValue.textContent = lyricsSpeed.value; };
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !lyricsOverlay.hidden) closeLyrics(); });
 backgroundAudio.loop = false;
 backgroundAudio.addEventListener('ended', () => {
   if (!state.loop || !backgroundAudio.src) return;
