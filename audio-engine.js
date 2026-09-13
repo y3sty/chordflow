@@ -118,12 +118,13 @@ export class AudioEngine {
     source.connect(filter).connect(gain).connect(this.master); source.start(when);
   }
 
-  async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false) {
+  async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false, isLoop = true) {
     await this.readyPromise;
     const sampleRate = 44100;
     const sixteenth = 60 / bpm / 4;
     const songDuration = totalUnits * sixteenth;
-    const totalDuration = songDuration + 2.5; // хвост затухания
+    const tailDuration = 2.5; // хвост затухания струн
+    const totalDuration = songDuration + tailDuration;
     const OfflineCtxClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OfflineCtxClass) throw new Error('OfflineAudioContext не поддерживается');
 
@@ -133,7 +134,8 @@ export class AudioEngine {
     offlineMaster.connect(offlineCtx.destination);
 
     events.forEach(event => {
-      const when = 0.05 + event.offsetUnits * sixteenth;
+      // Ровное начало без лишней тишины
+      const when = event.offsetUnits * sixteenth;
       const { block, stroke } = event;
       if (stroke.sound) {
         this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
@@ -143,6 +145,33 @@ export class AudioEngine {
     });
 
     const renderedBuffer = await offlineCtx.startRendering();
+
+    // Если зацикливание включено: идеально бесшовный луп (seamless loop)
+    // Хвост затухания последнего аккорда накладывается на самое начало трека,
+    // а длина файла обрезается ровно по тактам songDuration.
+    if (isLoop) {
+      const loopFrames = Math.round(sampleRate * songDuration);
+      const loopCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const loopBuffer = loopCtx.createBuffer(2, loopFrames, sampleRate);
+
+      for (let ch = 0; ch < 2; ch++) {
+        const srcData = renderedBuffer.getChannelData(ch);
+        const dstData = loopBuffer.getChannelData(ch);
+
+        // Копируем основное тело песни
+        for (let i = 0; i < loopFrames; i++) {
+          dstData[i] = srcData[i];
+        }
+
+        // Подмешиваем хвост затухания в начало (естественный переход круга)
+        const tailFrames = Math.min(srcData.length - loopFrames, loopFrames);
+        for (let i = 0; i < tailFrames; i++) {
+          dstData[i] += srcData[loopFrames + i];
+        }
+      }
+      return audioBufferToWavBlob(loopBuffer);
+    }
+
     return audioBufferToWavBlob(renderedBuffer);
   }
 

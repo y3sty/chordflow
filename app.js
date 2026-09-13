@@ -95,18 +95,7 @@ lyricsText.addEventListener('scroll', () => {
 lyricsAutoscroll.onchange = () => lyricsAutoscroll.checked ? startLyricsAutoscroll() : stopLyricsAutoscroll();
 lyricsSpeed.oninput = () => { lyricsSpeedValue.textContent = lyricsSpeed.value; };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !lyricsOverlay.hidden) closeLyrics(); });
-backgroundAudio.loop = false;
-backgroundAudio.addEventListener('ended', () => {
-  if (!state.loop || !backgroundAudio.src) return;
-  backgroundAudio.currentTime = 0;
-  backgroundAudio.play().catch(() => {});
-});
-backgroundAudio.addEventListener('timeupdate', () => {
-  if (!state.loop || !backgroundAudio.src || !Number.isFinite(backgroundAudio.duration)) return;
-  // Ранний переход помогает Safari, который иногда не перезапускает Blob-аудио
-  // через событие ended после блокировки экрана.
-  if (backgroundAudio.currentTime >= backgroundAudio.duration - 0.12) backgroundAudio.currentTime = 0;
-});
+backgroundAudio.loop = true;
 const sequencer = new Sequencer(audio, (item, step) => {
   if (item?.sectionId && item.sectionId !== state.currentSectionId) { state.currentSectionId = item.sectionId; refresh(); }
   updatePlayhead(item, step, state.currentSectionId);
@@ -283,8 +272,8 @@ $('#background-play').onclick = async () => {
     const recordState = { ...state, sequence, loop: false };
     const built = sequencer.buildEvents(recordState);
 
-    // Мгновенный аппаратный синтез WAV через OfflineAudioContext
-    const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes);
+    // Мгновенный аппаратный синтез WAV через OfflineAudioContext (с бесшовным сведением лупа)
+    const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes, state.loop);
     backgroundAudioUrl = URL.createObjectURL(wavBlob);
     backgroundAudio.src = backgroundAudioUrl;
     backgroundAudio.loop = state.loop;
