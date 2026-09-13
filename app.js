@@ -229,7 +229,10 @@ function stopBackgroundAudio() {
   backgroundAudio.load();
   if (backgroundAudioUrl) { URL.revokeObjectURL(backgroundAudioUrl); backgroundAudioUrl = null; }
   const button = $('#background-play');
-  if (button) button.textContent = '♫  Играть в фоне';
+  if (button) {
+    button.classList.remove('loading', 'active');
+    button.textContent = state.language === 'cs' ? '♫  Přehrávat na pozadí' : '♫  Играть в фоне';
+  }
 }
 
 function setMediaSession() {
@@ -260,13 +263,16 @@ $('#background-play').onclick = async () => {
   // Если фоновое аудио уже играет — пауза/остановка
   if (!backgroundAudio.paused && backgroundAudio.src) {
     stopBackgroundAudio();
-    button.textContent = '♫  Играть в фоне';
-    $('#audio-status').textContent = 'Фоновое воспроизведение остановлено';
+    $('#audio-status').textContent = state.language === 'cs' ? 'Přehrávání na pozadí zastaveno' : 'Фоновое воспроизведение остановлено';
     return;
   }
 
   button.disabled = true;
-  button.textContent = '♫  Собираю аудиофайл…';
+  button.classList.remove('active');
+  button.classList.add('loading');
+  button.textContent = state.language === 'cs' ? '⏳  Příprava audia…' : '⏳  Сборка аудиофайла…';
+  $('#audio-status').textContent = state.language === 'cs' ? 'Generuji audio pro pozadí…' : 'Синтезирую аудиодорожку песни…';
+
   try {
     sequencer.stop();
     setTransportState(false);
@@ -277,7 +283,7 @@ $('#background-play').onclick = async () => {
     const recordState = { ...state, sequence, loop: false };
     const built = sequencer.buildEvents(recordState);
 
-    // Мгновенный синтез WAV через OfflineAudioContext
+    // Мгновенный аппаратный синтез WAV через OfflineAudioContext
     const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes);
     backgroundAudioUrl = URL.createObjectURL(wavBlob);
     backgroundAudio.src = backgroundAudioUrl;
@@ -285,11 +291,14 @@ $('#background-play').onclick = async () => {
     setMediaSession();
 
     await backgroundAudio.play();
-    button.textContent = '■  Остановить фон';
-    $('#audio-status').textContent = 'Фоновое воспроизведение активно';
+    button.classList.remove('loading');
+    button.classList.add('active');
+    button.textContent = state.language === 'cs' ? '■  Zastavit pozadí' : '■  Остановить фон';
+    $('#audio-status').textContent = state.language === 'cs' ? 'Přehrávání na pozadí aktivní' : 'Фоновое воспроизведение активно';
   } catch (error) {
     console.warn('Ошибка запуска фонового аудио:', error);
-    button.textContent = '♫  Играть в фоне';
+    button.classList.remove('loading', 'active');
+    button.textContent = state.language === 'cs' ? '♫  Přehrávat na pozadí' : '♫  Играть в фоне';
     $('#audio-status').textContent = `Ошибка: ${error.message}`;
   } finally {
     button.disabled = false;
