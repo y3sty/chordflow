@@ -118,10 +118,140 @@ export class AudioEngine {
     source.connect(filter).connect(gain).connect(this.master); source.start(when);
   }
 
+  async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false) {
+    await this.readyPromise;
+    const sampleRate = 44100;
+    const sixteenth = 60 / bpm / 4;
+    const songDuration = totalUnits * sixteenth;
+    const totalDuration = songDuration + 2.5; // хвост затухания
+    const OfflineCtxClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OfflineCtxClass) throw new Error('OfflineAudioContext не поддерживается');
+
+    const offlineCtx = new OfflineCtxClass(2, Math.ceil(sampleRate * totalDuration), sampleRate);
+    const offlineMaster = offlineCtx.createGain();
+    offlineMaster.gain.value = 0.65;
+    offlineMaster.connect(offlineCtx.destination);
+
+    events.forEach(event => {
+      const when = 0.05 + event.offsetUnits * sixteenth;
+      const { block, stroke } = event;
+      if (stroke.sound) {
+        this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
+      } else if (stroke.mute && mutedStrikes) {
+        this.renderMuteToContext(offlineCtx, offlineMaster, when);
+      }
+    });
+
+    const renderedBuffer = await offlineCtx.startRendering();
+    return audioBufferToWavBlob(renderedBuffer);
+  }
+
+  renderChordToContext(ctx, master, chord, direction, when, stroke = {}) {
+    const range = stroke.stringRange || (direction === 'up' ? [2, 5] : [0, 5]);
+    const notes = chord.frets.map((fret, index) => fret === null || index < range[0] || index > range[1] ? null : { pitch: OPEN_STRING_MIDI[index] + fret, frequency: [82.41, 110, 146.83, 196, 246.94, 329.63][index] * Math.pow(2, fret / 12), stringIndex: index }).filter(Boolean);
+    const ordered = direction === 'up' ? [...notes].reverse() : notes;
+    const baseVelocity = stroke.velocity ?? (stroke.accent ? 1 : 0.72);
+    const spread = direction === 'up' ? 0.006 : 0.008;
+
+    if (this.player && this.instrument) {
+      const duration = direction === 'up' ? 1.0 : 1.25;
+      ordered.forEach((note, position) => {
+        const humanTime = when + position * spread + (Math.random() - 0.5) * 0.003;
+        const humanVelocity = Math.max(0.25, Math.min(1, baseVelocity * (0.94 + Math.random() * 0.12)));
+        this.player.queueWaveTable(ctx, master, this.instrument, humanTime, note.pitch, duration, humanVelocity);
+      });
+      return;
+    }
+
+    ordered.forEach((note, position) => {
+      const duration = direction === 'up' ? 1 : 1.2;
+      const oscillator = ctx.createOscillator();
+      oscillator.type = 'triangle';
+      oscillator.frequency.value = note.frequency;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = Math.min(3800, note.frequency * 7);
+      const gain = ctx.createGain();
+      const volume = ((stroke.velocity ?? 0.7) * 0.055) / Math.sqrt(note.frequency / 110);
+      const start = when + position * (direction === 'up' ? 0.006 : 0.008);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(volume, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      oscillator.connect(filter).connect(gain).connect(master);
+      oscillator.start(start);
+      oscillator.stop(start + duration + 0.03);
+    });
+  }
+
+  renderMuteToContext(ctx, master, when) {
+    const duration = 0.065;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) { const decay = 1 - i / data.length; data[i] = (Math.random() * 2 - 1) * decay * decay; }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1250;
+    filter.Q.value = 0.7;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.34, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
+    source.connect(filter).connect(gain).connect(master);
+    source.start(when);
+  }
+
   playFallback(chord, direction, when, stroke = {}) {
     const range = stroke.stringRange || (direction === 'up' ? [2, 5] : [0, 5]);
     const notes = chord.frets.map((fret, index) => fret === null || index < range[0] || index > range[1] ? null : { frequency: [82.41, 110, 146.83, 196, 246.94, 329.63][index] * Math.pow(2, fret / 12) }).filter(Boolean);
     const ordered = direction === 'up' ? [...notes].reverse() : notes;
     ordered.forEach((note, position) => { const duration = direction === 'up' ? 1 : 1.2; const oscillator = this.context.createOscillator(); oscillator.type = 'triangle'; oscillator.frequency.value = note.frequency; const filter = this.context.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = Math.min(3800, note.frequency * 7); const gain = this.context.createGain(); const volume = ((stroke.velocity ?? 0.7) * 0.055) / Math.sqrt(note.frequency / 110); const start = when + position * (direction === 'up' ? 0.006 : 0.008); gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration); oscillator.connect(filter).connect(gain).connect(this.master); oscillator.start(start); oscillator.stop(start + duration + 0.03); });
   }
+}
+
+function audioBufferToWavBlob(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const numFrames = buffer.length;
+  const dataSize = numFrames * blockAlign;
+  const headerSize = 44;
+  const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(arrayBuffer);
+
+  function writeString(offset, string) {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = [];
+  for (let i = 0; i < numChannels; i++) channels.push(buffer.getChannelData(i));
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      let sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
 }

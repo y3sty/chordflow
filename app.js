@@ -228,53 +228,72 @@ function stopBackgroundAudio() {
   backgroundAudio.removeAttribute('src');
   backgroundAudio.load();
   if (backgroundAudioUrl) { URL.revokeObjectURL(backgroundAudioUrl); backgroundAudioUrl = null; }
+  const button = $('#background-play');
+  if (button) button.textContent = '♫  Играть в фоне';
 }
 
 function setMediaSession() {
   if (!('mediaSession' in navigator)) return;
-  try { navigator.mediaSession.metadata = new MediaMetadata({ title: state.songName || 'Моя мелодия', artist: 'Chordflow', album: 'Конструктор аккордов' }); } catch {}
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: state.songName || 'Chordflow Мелодия',
+      artist: 'Chordflow',
+      album: `${state.bpm} BPM · ${state.pattern.name.split('·')[0].trim()}`
+    });
+  } catch {}
   const actions = {
-    play: () => backgroundAudio.play(),
+    play: () => backgroundAudio.play().catch(() => {}),
     pause: () => backgroundAudio.pause(),
-    seekbackward: () => { backgroundAudio.currentTime = Math.max(0, backgroundAudio.currentTime - 10); },
-    seekforward: () => { backgroundAudio.currentTime = Math.min(backgroundAudio.duration || Infinity, backgroundAudio.currentTime + 10); },
+    seekbackward: () => { backgroundAudio.currentTime = Math.max(0, backgroundAudio.currentTime - 5); },
+    seekforward: () => { backgroundAudio.currentTime = Math.min(backgroundAudio.duration || Infinity, backgroundAudio.currentTime + 5); },
   };
   Object.entries(actions).forEach(([action, handler]) => { try { navigator.mediaSession.setActionHandler?.(action, handler); } catch {} });
 }
 
 $('#stop').onclick = () => { sequencer.stop(); stopBackgroundAudio(); setTransportState(false); };
+
 $('#background-play').onclick = async () => {
   const sequence = playbackSequence();
   if (!sequence.length) return;
   const button = $('#background-play');
+
+  // Если фоновое аудио уже играет — пауза/остановка
+  if (!backgroundAudio.paused && backgroundAudio.src) {
+    stopBackgroundAudio();
+    button.textContent = '♫  Играть в фоне';
+    $('#audio-status').textContent = 'Фоновое воспроизведение остановлено';
+    return;
+  }
+
   button.disabled = true;
-  button.textContent = '♫  Собираю фоновую музыку…';
+  button.textContent = '♫  Собираю аудиофайл…';
   try {
+    sequencer.stop();
+    setTransportState(false);
     stopBackgroundAudio();
     audio.unlock();
     await audio.resume();
+
     const recordState = { ...state, sequence, loop: false };
     const built = sequencer.buildEvents(recordState);
-    sequencer.stop();
-    const recording = audio.startRecording();
-    await sequencer.start(recordState);
-    await new Promise(resolve => setTimeout(resolve, (built.totalUnits * 60 / state.bpm / 4 + 1.4) * 1000));
-    sequencer.stop();
-    const blob = await recording.done;
-    backgroundAudioUrl = URL.createObjectURL(blob);
+
+    // Мгновенный синтез WAV через OfflineAudioContext
+    const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes);
+    backgroundAudioUrl = URL.createObjectURL(wavBlob);
     backgroundAudio.src = backgroundAudioUrl;
-    // Используем и встроенный loop, и резервный обработчик ended:
-    // разные версии Safari по-разному работают с Blob-аудио.
     backgroundAudio.loop = state.loop;
     setMediaSession();
+
     await backgroundAudio.play();
-    button.textContent = '♫  Фоновый режим включён';
-    $('#audio-status').textContent = 'Фоновая музыка готова';
+    button.textContent = '■  Остановить фон';
+    $('#audio-status').textContent = 'Фоновое воспроизведение активно';
   } catch (error) {
-    console.warn('Фоновая запись не запустилась:', error);
+    console.warn('Ошибка запуска фонового аудио:', error);
     button.textContent = '♫  Играть в фоне';
-    $('#audio-status').textContent = 'Нажмите кнопку ещё раз, чтобы запустить фоновую музыку';
-  } finally { button.disabled = false; }
+    $('#audio-status').textContent = `Ошибка: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
 };
 const resumeAfterBackground = () => { if (audio.context) audio.resume().catch(() => {}); };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAfterBackground(); });
