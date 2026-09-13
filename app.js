@@ -31,7 +31,14 @@ const scrollLyrics = () => {
     lyricsScrollPosition = lyricsText.scrollTop;
   }
 
-  lyricsScrollPosition += Number(lyricsSpeed.value) * 0.075;
+  // Скорости 1..5 точно откалиброваны:
+  // 1 = как старая 8 (0.600)
+  // 2 = как старая 9 (0.675)
+  // 3 = как старая 10 (0.750)
+  // 4 = ускоренная ступень (0.825)
+  // 5 = максимальная ступень (0.900)
+  const speedMultiplier = (7 + Number(lyricsSpeed.value)) * 0.075;
+  lyricsScrollPosition += speedMultiplier;
   lyricsText.scrollTop = lyricsScrollPosition;
 
   if (lyricsText.scrollTop + lyricsText.clientHeight >= lyricsText.scrollHeight - 2) {
