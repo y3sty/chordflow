@@ -18,6 +18,7 @@ const LANGUAGE_PAIRS = [
   ['■  Стоп', '■  Stop'],
   ['♫ Текст песни', '♫ Text písně'],
   ['Текст песни', 'Text písně'],
+  ['Сохранить текст в таблицу', 'Uložit text do tabulky'],
   ['Вставьте или напишите текст песни…', 'Vložte nebo napište text písně…'],
   ['Автоскролл', 'Automatické posouvání'],
   ['Скорость', 'Rychlost'],

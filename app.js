@@ -17,26 +17,74 @@ let lyricsScrollTimer = null;
 let lyricsScrollPosition = 0;
 const lyricsStorageKey = 'guitar-constructor-lyrics-v1';
 lyricsText.value = localStorage.getItem(lyricsStorageKey) || '';
+let isUserInteractingWithLyrics = false;
+let userInteractionTimeout = null;
+
 const stopLyricsAutoscroll = () => { if (lyricsScrollTimer) clearInterval(lyricsScrollTimer); lyricsScrollTimer = null; };
+
 const scrollLyrics = () => {
   if (!lyricsAutoscroll.checked || lyricsOverlay.hidden) { stopLyricsAutoscroll(); return; }
-  // Скорость указана в условных уровнях: даже первый уровень должен
-  // медленно двигать текст, а второй — оставаться удобным для чтения.
+  if (isUserInteractingWithLyrics) return;
+
+  // Если пользователь руками прокрутил колесиком/тачем, подхватываем текущую позицию
+  if (Math.abs(lyricsText.scrollTop - lyricsScrollPosition) > 2) {
+    lyricsScrollPosition = lyricsText.scrollTop;
+  }
+
   lyricsScrollPosition += Number(lyricsSpeed.value) * 0.075;
   lyricsText.scrollTop = lyricsScrollPosition;
+
   if (lyricsText.scrollTop + lyricsText.clientHeight >= lyricsText.scrollHeight - 2) {
     lyricsAutoscroll.checked = false;
     stopLyricsAutoscroll();
     return;
   }
 };
-const startLyricsAutoscroll = () => { stopLyricsAutoscroll(); lyricsScrollPosition = lyricsText.scrollTop; lyricsScrollTimer = setInterval(scrollLyrics, 50); };
+
+const notifyUserScrollActivity = () => {
+  if (!lyricsAutoscroll.checked) return;
+  isUserInteractingWithLyrics = true;
+  lyricsScrollPosition = lyricsText.scrollTop;
+  if (userInteractionTimeout) clearTimeout(userInteractionTimeout);
+  // Через 800мс после окончания касания/скролла пользователя плавно продолжаем автоскролл с нового места
+  userInteractionTimeout = setTimeout(() => {
+    isUserInteractingWithLyrics = false;
+    lyricsScrollPosition = lyricsText.scrollTop;
+  }, 800);
+};
+
+const startLyricsAutoscroll = () => {
+  stopLyricsAutoscroll();
+  isUserInteractingWithLyrics = false;
+  lyricsScrollPosition = lyricsText.scrollTop;
+  lyricsScrollTimer = setInterval(scrollLyrics, 50);
+};
+
 const openLyrics = () => { lyricsOverlay.hidden = false; document.body.classList.add('lyrics-open'); lyricsText.focus(); };
-const closeLyrics = () => { lyricsAutoscroll.checked = false; stopLyricsAutoscroll(); lyricsOverlay.hidden = true; document.body.classList.remove('lyrics-open'); };
+const closeLyrics = () => {
+  lyricsAutoscroll.checked = false;
+  stopLyricsAutoscroll();
+  isUserInteractingWithLyrics = false;
+  lyricsOverlay.hidden = true;
+  document.body.classList.remove('lyrics-open');
+};
+
 $('#lyrics-open').onclick = openLyrics;
 $('#lyrics-close').onclick = closeLyrics;
 lyricsOverlay.addEventListener('click', event => { if (event.target === lyricsOverlay) closeLyrics(); });
 lyricsText.addEventListener('input', () => localStorage.setItem(lyricsStorageKey, lyricsText.value));
+
+// Отслеживаем действия пользователя: скролл колесиком/трекпадом, свайп пальцем на телефоне
+lyricsText.addEventListener('wheel', notifyUserScrollActivity, { passive: true });
+lyricsText.addEventListener('touchstart', notifyUserScrollActivity, { passive: true });
+lyricsText.addEventListener('touchmove', notifyUserScrollActivity, { passive: true });
+lyricsText.addEventListener('pointerdown', notifyUserScrollActivity, { passive: true });
+lyricsText.addEventListener('scroll', () => {
+  if (isUserInteractingWithLyrics) {
+    lyricsScrollPosition = lyricsText.scrollTop;
+  }
+}, { passive: true });
+
 lyricsAutoscroll.onchange = () => lyricsAutoscroll.checked ? startLyricsAutoscroll() : stopLyricsAutoscroll();
 lyricsSpeed.oninput = () => { lyricsSpeedValue.textContent = lyricsSpeed.value; };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !lyricsOverlay.hidden) closeLyrics(); });
@@ -93,17 +141,40 @@ function loadSong(file) {
 }
 
 function setCloudStatus(message, kind = '') { const element = $('#cloud-status'); element.textContent = message; element.className = `cloud-status ${kind}`; }
+function setLyricsCloudStatus(message, kind = '') { const element = $('#lyrics-cloud-status'); if (!element) return; element.textContent = message; element.className = `cloud-status ${kind}`; }
 
 async function saveCloudSong() {
   const code = $('#cloud-code').value.trim();
   if (!/^\d{4,12}$/.test(code)) { setCloudStatus(state.language === 'cs' ? 'Zadejte 4–12 číslic' : 'Введите от 4 до 12 цифр', 'error'); return; }
   setCloudStatus(state.language === 'cs' ? 'Ukládám…' : 'Сохраняю…');
   try {
-    const response = await fetch(CLOUD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', code, songName: state.songName, song: songData() }) });
+    const response = await fetch(CLOUD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', code, songName: state.songName, song: songData(), lyrics: lyricsText.value }) });
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || 'Ошибка сохранения');
     setCloudStatus(state.language === 'cs' ? 'Píseň uložena' : 'Песня сохранена', 'ok');
   } catch (error) { setCloudStatus(state.language === 'cs' ? 'Nepodařilo se uložit' : `Не удалось сохранить: ${error.message}`, 'error'); }
+}
+
+async function saveCloudLyrics() {
+  const code = $('#cloud-code').value.trim();
+  if (!/^\d{4,12}$/.test(code)) {
+    setLyricsCloudStatus(state.language === 'cs' ? 'Nejprve zadejte kód písně v horním panelu' : 'Сначала введите код песни на панели', 'error');
+    return;
+  }
+  setLyricsCloudStatus(state.language === 'cs' ? 'Ukládám text…' : 'Сохраняю текст…');
+  try {
+    const response = await fetch(CLOUD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save_lyrics', code, lyrics: lyricsText.value })
+    });
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || 'Ошибка сохранения');
+    setLyricsCloudStatus(state.language === 'cs' ? 'Text uložen' : 'Текст сохранён', 'ok');
+    setTimeout(() => { if ($('#lyrics-cloud-status')?.textContent === (state.language === 'cs' ? 'Text uložen' : 'Текст сохранён')) setLyricsCloudStatus(''); }, 4000);
+  } catch (error) {
+    setLyricsCloudStatus(state.language === 'cs' ? 'Nepodařilo se uložit text' : `Не удалось сохранить: ${error.message}`, 'error');
+  }
 }
 
 async function loadCloudSong() {
@@ -115,6 +186,10 @@ async function loadCloudSong() {
     const result = await response.json();
     if (!result.ok) throw new Error(result.error || 'Песня не найдена');
     applySongData(result.song, result.songName || 'Моя мелодия');
+    if (typeof result.lyrics === 'string') {
+      lyricsText.value = result.lyrics;
+      localStorage.setItem(lyricsStorageKey, result.lyrics);
+    }
     setCloudStatus(state.language === 'cs' ? 'Píseň načtena' : 'Песня загружена', 'ok');
   } catch (error) { setCloudStatus(state.language === 'cs' ? 'Píseň nebyla nalezena' : `Не удалось загрузить: ${error.message}`, 'error'); }
 }
@@ -203,3 +278,4 @@ $('#song-file').onchange = event => { if (event.target.files[0]) loadSong(event.
 $('#language-toggle').onclick = handlers.language;
 $('#cloud-save').onclick = saveCloudSong;
 $('#cloud-load').onclick = loadCloudSong;
+$('#lyrics-save-cloud').onclick = saveCloudLyrics;
