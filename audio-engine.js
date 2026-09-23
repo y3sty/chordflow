@@ -122,9 +122,21 @@ export class AudioEngine {
     await this.readyPromise;
     const sampleRate = 44100;
     const sixteenth = 60 / bpm / 4;
-    const songDuration = totalUnits * sixteenth;
+    const singleCycleDuration = totalUnits * sixteenth;
+
+    // В мобильных браузерах (Safari/WebKit) тег <audio loop> при переходе с конца файла в начало
+    // делает системную паузу 0.25-0.45с из-за перезапуска медиа-декодера.
+    // Решение:
+    // 1. Для одиночного проигрывания рендерим 1 цикл с естественным хвостом.
+    // 2. Для зацикливания рендерим непрерывную цепочку циклов (минимум 60 секунд музыки,
+    //    но не менее 4-8 повторений подряд без швов между ними) + бесшовное замыкание.
+    // В результате в течение 1-2 минут музыка идет абсолютно непрерывно,
+    // а сам аудио-луп переходит в разы реже и без микро-пауз внутри.
+    const numCycles = isLoop ? Math.max(4, Math.ceil(60 / singleCycleDuration)) : 1;
+    const songDuration = singleCycleDuration * numCycles;
     const tailDuration = 2.5; // хвост затухания струн
     const totalDuration = songDuration + tailDuration;
+
     const OfflineCtxClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OfflineCtxClass) throw new Error('OfflineAudioContext не поддерживается');
 
@@ -133,22 +145,21 @@ export class AudioEngine {
     offlineMaster.gain.value = 0.65;
     offlineMaster.connect(offlineCtx.destination);
 
-    events.forEach(event => {
-      // Ровное начало без лишней тишины
-      const when = event.offsetUnits * sixteenth;
-      const { block, stroke } = event;
-      if (stroke.sound) {
-        this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
-      } else if (stroke.mute && mutedStrikes) {
-        this.renderMuteToContext(offlineCtx, offlineMaster, when);
-      }
-    });
+    for (let cycle = 0; cycle < numCycles; cycle++) {
+      const cycleOffsetTime = cycle * singleCycleDuration;
+      events.forEach(event => {
+        const when = cycleOffsetTime + event.offsetUnits * sixteenth;
+        const { block, stroke } = event;
+        if (stroke.sound) {
+          this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
+        } else if (stroke.mute && mutedStrikes) {
+          this.renderMuteToContext(offlineCtx, offlineMaster, when);
+        }
+      });
+    }
 
     const renderedBuffer = await offlineCtx.startRendering();
 
-    // Если зацикливание включено: идеально бесшовный луп (seamless loop)
-    // Хвост затухания последнего аккорда накладывается на самое начало трека,
-    // а длина файла обрезается ровно по тактам songDuration.
     if (isLoop) {
       const loopFrames = Math.round(sampleRate * songDuration);
       const loopCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -163,7 +174,7 @@ export class AudioEngine {
           dstData[i] = srcData[i];
         }
 
-        // Подмешиваем хвост затухания в начало (естественный переход круга)
+        // Хвост последнего аккорда подмешиваем в самое начало первого цикла
         const tailFrames = Math.min(srcData.length - loopFrames, loopFrames);
         for (let i = 0; i < tailFrames; i++) {
           dstData[i] += srcData[loopFrames + i];
