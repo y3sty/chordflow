@@ -132,62 +132,61 @@ export class AudioEngine {
   async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false, isLoop = true, targetDurationSeconds = 60) {
     await this.readyPromise;
     await this.waitForInstrument();
-    const sampleRate = 44100;
+
+    // Идея 2: 22050 Гц — в 2 раза меньше данных, звук гитары на слух идентичен
+    const sampleRate = 22050;
     const sixteenth = 60 / bpm / 4;
     const singleCycleDuration = totalUnits * sixteenth;
 
-    // Рендерим непрерывную цепочку циклов точно под выбранную пользователем длительность
-    // (60 сек, 180 сек / 3 мин, 300 сек / 5 мин, 600 сек / 10 мин), но не менее 1 полного цикла
     const desiredDuration = Math.max(30, Number(targetDurationSeconds) || 60);
     const numCycles = isLoop ? Math.max(1, Math.ceil(desiredDuration / singleCycleDuration)) : 1;
-    const songDuration = singleCycleDuration * numCycles;
     const tailDuration = 2.5; // хвост затухания струн
-    const totalDuration = songDuration + tailDuration;
 
     const OfflineCtxClass = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OfflineCtxClass) throw new Error('OfflineAudioContext не поддерживается');
 
-    const offlineCtx = new OfflineCtxClass(2, Math.ceil(sampleRate * totalDuration), sampleRate);
+    // Идея 1: рендерим только ОДИН цикл + хвост (независимо от numCycles)
+    const renderDuration = singleCycleDuration + tailDuration;
+    const offlineCtx = new OfflineCtxClass(2, Math.ceil(sampleRate * renderDuration), sampleRate);
     const offlineMaster = offlineCtx.createGain();
     offlineMaster.gain.value = 0.65;
     offlineMaster.connect(offlineCtx.destination);
 
-    for (let cycle = 0; cycle < numCycles; cycle++) {
-      const cycleOffsetTime = cycle * singleCycleDuration;
-      events.forEach(event => {
-        const when = cycleOffsetTime + event.offsetUnits * sixteenth;
-        const { block, stroke } = event;
-        if (stroke.sound) {
-          this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
-        } else if (stroke.mute && mutedStrikes) {
-          this.renderMuteToContext(offlineCtx, offlineMaster, when);
-        }
-      });
-    }
+    events.forEach(event => {
+      const when = event.offsetUnits * sixteenth;
+      const { block, stroke } = event;
+      if (stroke.sound) {
+        this.renderChordToContext(offlineCtx, offlineMaster, block.chord, stroke.dir, when, stroke);
+      } else if (stroke.mute && mutedStrikes) {
+        this.renderMuteToContext(offlineCtx, offlineMaster, when);
+      }
+    });
 
     const renderedBuffer = await offlineCtx.startRendering();
 
     if (isLoop) {
-      const loopFrames = Math.round(sampleRate * songDuration);
-      const loopCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const loopBuffer = loopCtx.createBuffer(2, loopFrames, sampleRate);
+      const loopFrames = Math.round(sampleRate * singleCycleDuration);
 
+      // Строим один бесшовный цикл: тело + хвост подмешан в начало
+      const cycleChannels = [];
       for (let ch = 0; ch < 2; ch++) {
         const srcData = renderedBuffer.getChannelData(ch);
-        const dstData = loopBuffer.getChannelData(ch);
-
-        // Копируем основное тело песни
-        for (let i = 0; i < loopFrames; i++) {
-          dstData[i] = srcData[i];
-        }
-
-        // Хвост последнего аккорда подмешиваем в самое начало первого цикла
+        const cycleData = new Float32Array(loopFrames);
+        for (let i = 0; i < loopFrames; i++) cycleData[i] = srcData[i];
         const tailFrames = Math.min(srcData.length - loopFrames, loopFrames);
-        for (let i = 0; i < tailFrames; i++) {
-          dstData[i] += srcData[loopFrames + i];
-        }
+        for (let i = 0; i < tailFrames; i++) cycleData[i] += srcData[loopFrames + i];
+        cycleChannels.push(cycleData);
       }
-      return audioBufferToWavBlob(loopBuffer);
+
+      // Идея 1: тиражируем цикл N раз через TypedArray.set() — мгновенно
+      const totalFrames = loopFrames * numCycles;
+      const tiledChannels = cycleChannels.map(cycleData => {
+        const tiled = new Float32Array(totalFrames);
+        for (let c = 0; c < numCycles; c++) tiled.set(cycleData, c * loopFrames);
+        return tiled;
+      });
+
+      return channelsToWavBlob(tiledChannels, sampleRate, totalFrames);
     }
 
     return audioBufferToWavBlob(renderedBuffer);
@@ -289,6 +288,47 @@ function audioBufferToWavBlob(buffer) {
 
   const channels = [];
   for (let i = 0; i < numChannels; i++) channels.push(buffer.getChannelData(i));
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      let sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+function channelsToWavBlob(channels, sampleRate, numFrames) {
+  const numChannels = channels.length;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataSize = numFrames * blockAlign;
+  const headerSize = 44;
+  const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
+  const view = new DataView(arrayBuffer);
+
+  function writeString(offset, string) {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
 
   let offset = 44;
   for (let i = 0; i < numFrames; i++) {

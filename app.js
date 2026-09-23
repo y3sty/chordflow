@@ -1,5 +1,5 @@
 import { CHORDS, PATTERNS } from './ui.js?v=chords-4';
-import { AudioEngine } from './audio-engine.js?v=eighth-12';
+import { AudioEngine } from './audio-engine.js?v=eighth-13';
 import { Sequencer } from './sequencer.js?v=eighth-10';
 import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=chords-4';
 
