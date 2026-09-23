@@ -1,5 +1,5 @@
 import { CHORDS, PATTERNS } from './ui.js?v=chords-4';
-import { AudioEngine } from './audio-engine.js?v=eighth-10';
+import { AudioEngine } from './audio-engine.js?v=eighth-12';
 import { Sequencer } from './sequencer.js?v=eighth-10';
 import { createInitialState, persist, renderPalette, renderSections, renderTimeline, setupControls, setTransportState, updatePlayhead, applyLanguage, $ } from './ui.js?v=chords-4';
 
@@ -250,6 +250,9 @@ $('#background-play').onclick = async () => {
   if (!sequence.length) return;
   const button = $('#background-play');
 
+  // Разблокируем AudioContext немедленно, пока ещё действует жест пользователя
+  audio.unlock();
+
   // Если фоновое аудио уже играет — пауза/остановка
   if (!backgroundAudio.paused && backgroundAudio.src) {
     stopBackgroundAudio();
@@ -267,7 +270,6 @@ $('#background-play').onclick = async () => {
     sequencer.stop();
     setTransportState(false);
     stopBackgroundAudio();
-    audio.unlock();
     await audio.resume();
 
     const recordState = { ...state, sequence, loop: false };
@@ -278,6 +280,7 @@ $('#background-play').onclick = async () => {
     const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes, state.loop, targetSeconds);
     backgroundAudioUrl = URL.createObjectURL(wavBlob);
     backgroundAudio.src = backgroundAudioUrl;
+    backgroundAudio.load();
     backgroundAudio.loop = state.loop;
     setMediaSession();
 

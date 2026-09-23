@@ -74,6 +74,17 @@ export class AudioEngine {
     return { recorder, mimeType, done: new Promise(resolve => { recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/mp4' })); }) };
   }
 
+  async waitForInstrument(timeoutMs = 8000) {
+    if (!this.instrument || !this.instrument.zones) return;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const allReady = this.instrument.zones.every(zone => zone.buffer);
+      if (allReady) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    // Истёк таймаут — продолжаем с тем, что есть (часть зон может быть не декодирована)
+  }
+
   async loadSteelGuitar() {
     try {
       if (!window.WebAudioFontPlayer) await loadScript(PLAYER_URL);
@@ -120,6 +131,7 @@ export class AudioEngine {
 
   async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false, isLoop = true, targetDurationSeconds = 60) {
     await this.readyPromise;
+    await this.waitForInstrument();
     const sampleRate = 44100;
     const sixteenth = 60 / bpm / 4;
     const singleCycleDuration = totalUnits * sixteenth;
