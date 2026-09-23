@@ -118,21 +118,16 @@ export class AudioEngine {
     source.connect(filter).connect(gain).connect(this.master); source.start(when);
   }
 
-  async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false, isLoop = true) {
+  async renderWavBlob(events, totalUnits, bpm, mutedStrikes = false, isLoop = true, targetDurationSeconds = 60) {
     await this.readyPromise;
     const sampleRate = 44100;
     const sixteenth = 60 / bpm / 4;
     const singleCycleDuration = totalUnits * sixteenth;
 
-    // В мобильных браузерах (Safari/WebKit) тег <audio loop> при переходе с конца файла в начало
-    // делает системную паузу 0.25-0.45с из-за перезапуска медиа-декодера.
-    // Решение:
-    // 1. Для одиночного проигрывания рендерим 1 цикл с естественным хвостом.
-    // 2. Для зацикливания рендерим непрерывную цепочку циклов (минимум 60 секунд музыки,
-    //    но не менее 4-8 повторений подряд без швов между ними) + бесшовное замыкание.
-    // В результате в течение 1-2 минут музыка идет абсолютно непрерывно,
-    // а сам аудио-луп переходит в разы реже и без микро-пауз внутри.
-    const numCycles = isLoop ? Math.max(4, Math.ceil(60 / singleCycleDuration)) : 1;
+    // Рендерим непрерывную цепочку циклов точно под выбранную пользователем длительность
+    // (60 сек, 180 сек / 3 мин, 300 сек / 5 мин, 600 сек / 10 мин), но не менее 1 полного цикла
+    const desiredDuration = Math.max(30, Number(targetDurationSeconds) || 60);
+    const numCycles = isLoop ? Math.max(1, Math.ceil(desiredDuration / singleCycleDuration)) : 1;
     const songDuration = singleCycleDuration * numCycles;
     const tailDuration = 2.5; // хвост затухания струн
     const totalDuration = songDuration + tailDuration;

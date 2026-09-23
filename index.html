@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chordflow — конструктор боя</title>
-  <link rel="stylesheet" href="styles.css?v=bg-loop-1">
+  <link rel="stylesheet" href="styles.css?v=bg-dur-1">
 </head>
 
 <body>
@@ -23,8 +23,8 @@
     </header>
     <section class="transport">
       <div class="transport-buttons"><button id="play" class="primary">▶ Играть</button><button id="stop">■
-          Стоп</button><button id="background-play" class="background-button"
-          title="Собрать песню для фонового воспроизведения">♫ Играть в фоне</button><label class="toggle"><input
+          Стоп</button><div class="bg-play-group"><button id="background-play" class="background-button"
+            title="Собрать песню для фонового воспроизведения">♫ Играть в фоне</button><select id="bg-duration-select" class="bg-duration-select" title="Длительность фонового трека"><option value="60" selected>1 мин</option><option value="180">3 мин</option><option value="300">5 мин</option><option value="600">10 мин</option></select></div><label class="toggle"><input
             id="loop" type="checkbox"><span></span> Зациклить</label></div>
       <div class="transport-settings"><label>Бой <select id="pattern-select"></select></label><label
           class="bpm-control">Темп <input id="bpm" type="range" min="40" max="200"><output
@@ -92,7 +92,7 @@
           автоматически</span></div>
     </div>
   </section>
-  <script type="module" src="app.js?v=bg-loop-2"></script>
+  <script type="module" src="app.js?v=bg-dur-1"></script>
 </body>
 
 </html>

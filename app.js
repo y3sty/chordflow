@@ -207,6 +207,7 @@ const handlers = {
   loop(value) { state.loop = value; backgroundAudio.loop = value; persist(state); },
   muted(value) { state.mutedStrikes = value; persist(state); },
   showStructure(value) { state.showSongStructure = value; persist(state); $('#section-switcher').classList.toggle('hidden', !value); },
+  bgDuration(value) { state.bgDuration = value; persist(state); },
   language() { state.language = state.language === 'ru' ? 'cs' : 'ru'; refresh(); },
 };
 
@@ -273,7 +274,8 @@ $('#background-play').onclick = async () => {
     const built = sequencer.buildEvents(recordState);
 
     // Мгновенный аппаратный синтез WAV через OfflineAudioContext (с бесшовным сведением лупа)
-    const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes, state.loop);
+    const targetSeconds = Number($('#bg-duration-select')?.value) || 60;
+    const wavBlob = await audio.renderWavBlob(built.events, built.totalUnits, state.bpm, state.mutedStrikes, state.loop, targetSeconds);
     backgroundAudioUrl = URL.createObjectURL(wavBlob);
     backgroundAudio.src = backgroundAudioUrl;
     backgroundAudio.loop = state.loop;

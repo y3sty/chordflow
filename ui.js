@@ -29,6 +29,10 @@ const LANGUAGE_PAIRS = [
   ['♫  Собираю фоновую музыку…', '♫  Připravuji hudbu na pozadí…'],
   ['Нажмите кнопку ещё раз, чтобы запустить фоновую музыку', 'Stiskněte tlačítko znovu pro spuštění hudby na pozadí'],
   ['Зациклить', 'Opakovat'],
+  ['1 мин', '1 min'],
+  ['3 мин', '3 min'],
+  ['5 мин', '5 min'],
+  ['10 мин', '10 min'],
   ['Сохранить', 'Uložit'],
   ['Открыть', 'Otevřít'],
   ['Код песни', 'Kód písně'],
@@ -101,10 +105,12 @@ export function createInitialState() {
   ];
   const validIds = new Set(sections.map(section => section.id));
   const songOrder = (saved?.songOrder || ['verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus']).filter(id => validIds.has(id));
-  return { songName: saved?.songName || 'Моя мелодия', language: saved?.language || 'ru', bpm: saved?.bpm || 90, pattern: PATTERNS.find(p => p.id === saved?.patternId) || PATTERNS[0], loop: saved?.loop ?? true, mutedStrikes: saved?.mutedStrikes ?? false, showSongStructure: saved?.showSongStructure ?? true, sections, songOrder: songOrder.length ? songOrder : ['verse'], currentSectionId: validIds.has(saved?.currentSectionId) ? saved.currentSectionId : sections[0].id };
+    currentSectionId: validIds.has(saved?.currentSectionId) ? saved.currentSectionId : sections[0].id,
+    bgDuration: Number(saved?.bgDuration) || 60
+  };
 }
 
-export function persist(state) { localStorage.setItem(appKey, JSON.stringify({ songName: state.songName, language: state.language, bpm: state.bpm, patternId: state.pattern.id, loop: state.loop, mutedStrikes: state.mutedStrikes, showSongStructure: state.showSongStructure, currentSectionId: state.currentSectionId, songOrder: state.songOrder, sections: state.sections.map(section => ({ id: section.id, name: section.name, sequence: section.sequence.map(({ chord, bars, strumPart }) => ({ chord: { id: chord.id }, bars, strumPart: strumPart || 'full' })) })) })); }
+export function persist(state) { localStorage.setItem(appKey, JSON.stringify({ songName: state.songName, language: state.language, bpm: state.bpm, patternId: state.pattern.id, loop: state.loop, mutedStrikes: state.mutedStrikes, showSongStructure: state.showSongStructure, bgDuration: state.bgDuration || 60, currentSectionId: state.currentSectionId, songOrder: state.songOrder, sections: state.sections.map(section => ({ id: section.id, name: section.name, sequence: section.sequence.map(({ chord, bars, strumPart }) => ({ chord: { id: chord.id }, bars, strumPart: strumPart || 'full' })) })) })); }
 
 export function renderPalette(onAdd) {
   const card = chord => `<article class="chord-card" draggable="true" data-id="${chord.id}"><div class="card-top"><strong>${chord.name}</strong><button class="add-button" aria-label="Добавить ${chord.name}">+</button></div>${renderChordDiagram(chord)}</article>`;
@@ -138,6 +144,11 @@ export function setupControls(state, handlers) {
   const muteAvailable = state.pattern.id.startsWith('shestyorka');
   const muteControl = $('#mute-strikes').closest('label');
   $('#bpm').value = state.bpm; $('#bpm-value').textContent = `${state.bpm} BPM`; $('#loop').checked = state.loop; $('#mute-strikes').checked = state.mutedStrikes; $('#mute-strikes').disabled = !muteAvailable; muteControl.classList.toggle('disabled', !muteAvailable); muteControl.title = 'Работает только с вариантами боя «Шестёрка»'; $('#show-song-structure').checked = state.showSongStructure; $('#section-switcher').classList.toggle('hidden', !state.showSongStructure);
+  const bgDurationSelect = $('#bg-duration-select');
+  if (bgDurationSelect) {
+    bgDurationSelect.value = String(state.bgDuration || 60);
+    bgDurationSelect.onchange = e => handlers.bgDuration(Number(e.target.value));
+  }
   $('#pattern-select').onchange = e => handlers.pattern(e.target.value); $('#bpm').oninput = e => handlers.bpm(Number(e.target.value)); $('#loop').onchange = e => handlers.loop(e.target.checked); $('#mute-strikes').onchange = e => handlers.muted(e.target.checked); $('#show-song-structure').onchange = e => handlers.showStructure(e.target.checked);
 }
 
