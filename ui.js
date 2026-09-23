@@ -105,6 +105,16 @@ export function createInitialState() {
   ];
   const validIds = new Set(sections.map(section => section.id));
   const songOrder = (saved?.songOrder || ['verse', 'chorus', 'verse', 'chorus', 'bridge', 'chorus']).filter(id => validIds.has(id));
+  return {
+    songName: saved?.songName || 'Моя мелодия',
+    language: saved?.language || 'ru',
+    bpm: saved?.bpm || 90,
+    pattern: PATTERNS.find(p => p.id === saved?.patternId) || PATTERNS[0],
+    loop: saved?.loop ?? true,
+    mutedStrikes: saved?.mutedStrikes ?? false,
+    showSongStructure: saved?.showSongStructure ?? true,
+    sections,
+    songOrder: songOrder.length ? songOrder : ['verse'],
     currentSectionId: validIds.has(saved?.currentSectionId) ? saved.currentSectionId : sections[0].id,
     bgDuration: Number(saved?.bgDuration) || 60
   };
